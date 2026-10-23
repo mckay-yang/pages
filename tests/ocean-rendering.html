@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Ocean rendering regression</title>
+<style>canvas { width: 800px; height: 500px; } pre { white-space: pre-wrap; }</style>
+<canvas id="ocean"></canvas><pre id="result">Running…</pre>
+<script src="../docs/ocean.js"></script>
+<script>
+window.testDone = (async () => {
+  const results = [], assert = (condition, name) => {
+    results.push({name, pass: !!condition});
+    if(!condition) throw new Error(name);
+  };
+  const canvas = document.querySelector('canvas'), ocean = new AsciiOcean(canvas);
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  try {
+    ocean.stop();
+    const renderer = ocean.renderer, world = ocean.world, ctx = canvas.getContext('2d');
+    const pixels = () => ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    // Let browsers choose their readback backend before taking a reference image.
+    pixels(); pixels(); pixels();
+    const animals = { sharks: world.sharks, fish: world.fish };
+    const empty = () => {
+      world.sharks = []; world.fish = []; world.events = [];
+      renderer.energy.fill(0); renderer.energyTmp.fill(0); renderer.heat.fill(0);
+      renderer.render(world, 0);
+    };
+    empty(); const expected = pixels();
+    Object.assign(world, animals); renderer.render(world, 0);
+    const occupied = pixels();
+    assert(occupied.some((value, i) => value !== expected[i]), 'Scene contains visible animals');
+    // v0.1.4 loses the only opaque background if this detached backing store resets.
+    if(renderer.bg) renderer.bg.width = renderer.bg.width;
+    empty();
+    // GPU/CPU readback paths can round antialiased grid edges by one color level.
+    const cleared = pixels(), staleChannels = cleared.reduce((n, value, i) => n + (Math.abs(value-expected[i]) > 2), 0);
+    results.push({staleChannels});
+    assert(staleChannels === 0, 'Old glyphs clear even after cached backing-store loss');
+    Object.assign(world, animals);
+    const sameShark = world.sharks[0], time = world.time;
+    ocean.start();
+    const lost = new Event('contextlost', { cancelable: true }); canvas.dispatchEvent(lost);
+    assert(!lost.defaultPrevented, '2D restoration is not canceled');
+    await wait(150);
+    assert(world.time === time && ocean.raf === 0, 'Lost context suspends animation scheduling');
+    // Reset the actual 2D state as the browser does before contextrestored.
+    canvas.width = canvas.width; canvas.dispatchEvent(new Event('contextrestored'));
+    assert(world.sharks[0] === sameShark && world.time === time, 'Restoration preserves animals and simulation time');
+    await wait(200);
+    assert(world.time > time, 'Restored context resumes animation');
+    ocean.stop();
+    canvas.dispatchEvent(new Event('contextlost')); canvas.dispatchEvent(new Event('contextrestored'));
+    assert(ocean.raf === 0 && !ocean.running, 'Restoration does not restart a suspended ocean');
+    ocean.start();
+    await wait(11000);
+    assert(ocean.world.time > time + 1, 'Animation continues beyond the reported 4–10 second failure window');
+  } catch(error) { results.push({error: error.message}); }
+  finally { ocean.stop(); }
+  window.testResults = results;
+  document.querySelector('#result').textContent = JSON.stringify(results, null, 2);
+  return results;
+})();
+</script>

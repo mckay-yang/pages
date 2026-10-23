@@ -3,74 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f9fc">
+  <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="data:,">
-  <title>耗电模式 v0.1.0</title>
+  <title>耗电模式 v0.1.7</title>
   <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; }
-    body { background: radial-gradient(ellipse at 28% 28%, #e5f5ff 0, transparent 50%), radial-gradient(ellipse at 75% 76%, #e8f0fa 0, transparent 48%), #f8fafc; color: #244c67; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body { position: fixed; inset: 0; background: #f7f7f5; color: #343a40; }
+    #ocean-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; filter: invert(1); }
     #gpu-canvas { position: fixed; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
-    main { position: relative; min-height: 100svh; min-height: 100dvh; display: grid; place-items: center; padding: 48px 24px max(64px, env(safe-area-inset-bottom)); }
-    .toggle { position: relative; isolation: isolate; width: clamp(190px, 28vw, 264px); aspect-ratio: 1; display: grid; place-content: center; justify-items: center; gap: 17px; overflow: hidden; border-radius: 50%; border: 1px solid rgba(255,255,255,.95); color: #234d6a; cursor: pointer; background: radial-gradient(ellipse at 28% 12%, rgba(255,255,255,.95), transparent 50%), linear-gradient(145deg, rgba(255,255,255,.58), rgba(170,214,241,.25) 55%, rgba(255,255,255,.6)); -webkit-backdrop-filter: blur(24px) saturate(1.5); backdrop-filter: blur(24px) saturate(1.5); box-shadow: inset 0 2px 2px #fff, inset 0 -3px 7px rgba(83,140,179,.16), inset 3px 0 12px rgba(255,255,255,.8), 0 18px 48px rgba(66,108,143,.13), 0 3px 8px rgba(66,108,143,.07); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: transform .22s, box-shadow .3s, color .3s; }
-    .toggle::before { content: ""; position: absolute; inset: 7px; border: 1px solid rgba(255,255,255,.6); border-radius: inherit; pointer-events: none; }
-    .toggle::after { content: ""; position: absolute; z-index: -1; width: 88%; height: 45%; top: -4%; left: 6%; border-radius: 50%; background: linear-gradient(rgba(255,255,255,.7), rgba(255,255,255,0)); transform: rotate(-25deg); pointer-events: none; }
-    .toggle:active { transform: scale(.95); }
-    .toggle[data-running="true"] { color: #1c6585; box-shadow: inset 0 2px 2px #fff, inset 0 -3px 9px rgba(64,158,195,.24), inset 3px 0 12px rgba(255,255,255,.8), 0 18px 55px rgba(45,133,175,.21), 0 3px 8px rgba(66,108,143,.08); }
+    main { position: absolute; inset: 0; display: grid; place-items: center; padding: max(48px, env(safe-area-inset-top)) 24px max(64px, env(safe-area-inset-bottom)); touch-action: pinch-zoom; user-select: none; -webkit-user-select: none; transform: translate3d(var(--pull-x, 0px), var(--pull-y, 0px), 0); transition: transform .42s cubic-bezier(.2,.8,.2,1); }
+    main[data-dragging="true"] { transition: none; }
+    .controls { display: grid; justify-items: center; gap: 30px; z-index: 1; }
+    .elapsed { position: relative; isolation: isolate; padding: 8px 12px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: .12em; color: #676b70; }
+    .elapsed::before { content: ""; position: absolute; inset: -18px -32px; z-index: -1; pointer-events: none; background: rgba(255,255,255,.5); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); -webkit-mask-image: radial-gradient(ellipse at center, #000 15%, rgba(0,0,0,.8) 40%, transparent 72%); mask-image: radial-gradient(ellipse at center, #000 15%, rgba(0,0,0,.8) 40%, transparent 72%); }
+    .toggle { --diameter: clamp(170px, 23vw, 220px); position: relative; isolation: isolate; width: var(--diameter); height: var(--diameter); padding: 0; flex-shrink: 0; appearance: none; -webkit-appearance: none; display: grid; place-content: center; justify-items: center; overflow: hidden; border-radius: 50%; border: 1px solid rgba(255,255,255,.65); color: #343a40; cursor: pointer; background: transparent; transform: translateZ(0); box-shadow: inset 0 1px 1px rgba(255,255,255,.85), inset 0 -1px 2px rgba(30,35,40,.06), 0 10px 32px rgba(30,35,40,.08); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: box-shadow .3s, color .3s; }
+    .toggle-glass { position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit; clip-path: circle(50% at 50% 50%); background: linear-gradient(145deg, rgba(255,255,255,.12), rgba(245,245,242,.04)); -webkit-backdrop-filter: blur(12px) saturate(1.08); backdrop-filter: blur(12px) saturate(1.08); }
+    .toggle::before { content: ""; position: absolute; inset: 2px; border: 1px solid rgba(255,255,255,.24); border-radius: inherit; pointer-events: none; }
+    .toggle::after { content: ""; position: absolute; z-index: -1; width: 88%; height: 45%; top: -4%; left: 6%; border-radius: 50%; background: linear-gradient(rgba(255,255,255,.18), rgba(255,255,255,0)); transform: rotate(-25deg); pointer-events: none; }
+    .toggle:active { box-shadow: inset 0 1px 4px rgba(30,35,40,.18), 0 4px 18px rgba(30,35,40,.06); }
+    .toggle[data-running="true"] { color: #2d3439; box-shadow: inset 0 1px 1px rgba(255,255,255,.85), inset 0 -1px 3px rgba(30,35,40,.07), 0 8px 28px rgba(30,35,40,.1); }
     .toggle svg { width: 29px; height: 29px; fill: currentColor; }
-    .toggle span { font-size: 27px; font-weight: 500; letter-spacing: .12em; padding-left: .12em; }
     .toggle[data-running="true"] .play, .toggle[data-running="false"] .stop-icon { display: none; }
     .toggle:focus-visible { outline: 3px solid #397eac; outline-offset: 8px; }
-    .version { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 0; right: 0; color: #738597; text-align: center; font-size: 11px; letter-spacing: .08em; }
-    @media (max-height: 420px) { .toggle { width: 180px; gap: 10px; } .toggle span { font-size: 23px; } }
-    @media (prefers-reduced-motion: reduce) { .toggle { transition: none; } }
-    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .toggle { background-color: #e5f0f8; } }
+    .version { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 0; right: 0; color: #979b9e; text-align: center; font-size: 10px; letter-spacing: .08em; }
+    @media (max-height: 420px) { .toggle { --diameter: 180px; } }
+    @media (prefers-color-scheme: dark) {
+      body { background: #000; color: #ececec; }
+      #ocean-canvas { filter: none; }
+      .toggle { color: #eee; border-color: rgba(255,255,255,.15); box-shadow: inset 0 1px 1px rgba(255,255,255,.12), 0 12px 30px rgba(0,0,0,.2); }
+      .toggle-glass { background: linear-gradient(145deg, rgba(32,33,34,.12), rgba(12,13,14,.06)); }
+      .toggle[data-running="true"] { color: #eee; box-shadow: inset 0 1px 1px rgba(255,255,255,.15), 0 10px 28px rgba(0,0,0,.25); }
+      .toggle::before { border-color: rgba(255,255,255,.07); }
+      .toggle::after { opacity: .1; }
+      .elapsed { color: #a0a0a0; }
+      .elapsed::before { background: rgba(0,0,0,.5); }
+      .version { color: #777; }
+    }
+    @media (prefers-reduced-motion: reduce) { main, .toggle { transition: none; } }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .toggle-glass { background-color: #e5f0f8; } }
   </style>
 </head>
 <body>
+  <canvas id="ocean-canvas" aria-hidden="true"></canvas>
   <canvas id="gpu-canvas" aria-hidden="true"></canvas>
   <main>
-    <button id="toggle" class="toggle" type="button" data-running="false" aria-pressed="false" aria-label="开始耗电"><svg class="play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5v15l12-7.5z"/></svg><svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3"/></svg><span id="toggle-label">开始</span></button>
-    <footer class="version" aria-label="版本号">v0.1.0</footer>
+    <div class="controls">
+    <button id="toggle" class="toggle" type="button" data-running="false" aria-pressed="false" aria-label="开始耗电"><span class="toggle-glass" aria-hidden="true"></span><svg class="play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5v15l12-7.5z"/></svg><svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3"/></svg></button>
+    <output id="elapsed" class="elapsed" aria-label="运行时间">00:00:00</output>
+    </div>
+    <footer class="version" aria-label="版本号">v0.1.7</footer>
   </main>
+  <script src="./ocean.js?v=0.1.7"></script>
   <script>
   (() => {
     'use strict';
     const $ = id => document.getElementById(id);
-    const ui = { toggle: $('toggle'), 'toggle-label': $('toggle-label'), 'gpu-canvas': $('gpu-canvas') };
+    const ui = { toggle: $('toggle'), elapsed: $('elapsed'), 'gpu-canvas': $('gpu-canvas') };
     const state = {
-      running: false, workers: [], neural: null, raf: 0,
+      running: false, workers: [], neural: null, raf: 0, startTime: 0, elapsed: 0,
       backend: 'none', gpu: null, gl: null, gpuDispatches: 0, resizeNeeded: true,
       wakeLocks: new Set(), wakeLock: null, wakePending: false, wakeRetry: 0, wakeActive: true, wakeVersion: 0, runVersion: 0, statusTimer: 0,
-      gpuFault: false, wakeStatus: '保持唤醒已关闭'
+      gpuRecovering: false, gpuRecoveries: 0, gpuRetryTimer: 0, gpuRetryAttempts: 0, wakeStatus: '保持唤醒已关闭'
     };
     const reportedConcurrency = Math.max(4, Math.min(64, (navigator.hardwareConcurrency || 4) * 2));
     const load = Object.freeze({ iterations: 512, dispatches: 4, steps: 192, fractal: 16, scale: 1 });
     const gpuLoad = () => load;
+    const gpuQueue = Object.freeze({ computeElements: 262144, tileSize: 512, depth: 16, checkpoint: 4 });
     function showError(message) { console.error(message); ui.toggle.title = String(message instanceof Error ? message.message : message); }
     function clearError() { ui.toggle.removeAttribute('title'); }
     window.addEventListener('error', e => showError(e.error || e.message));
     window.addEventListener('unhandledrejection', e => showError(e.reason || 'Unhandled promise rejection'));
-    const workerSource = "(function burnWorker() {\n  const report = (state, detail) => postMessage({ state, detail });\n  onmessage = async ({ data: { role, seed = 1 } }) => {\n    try {\n      if (role === 'crypto') {\n        if (!self.crypto?.subtle) { report('unavailable', 'Web Crypto unavailable'); return; }\n        const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt']);\n        const data = new Uint8Array(4 * 1024 * 1024);\n        for (let i = 0; i < data.length; i++) data[i] = (i * 31 + seed) & 255;\n        let counter = 0, lastReport = 0;\n        report('running', 'AES-256-GCM + SHA-256; hardware selection belongs to browser');\n        while (true) {\n          const iv = new Uint8Array(12); new DataView(iv.buffer).setBigUint64(4, BigInt(counter++));\n          await Promise.all([crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data), crypto.subtle.digest('SHA-256', data)]);\n          if(performance.now() - lastReport > 1000) { report('running', { role, batches: counter }); lastReport = performance.now(); }\n        }\n      }\n      if (role === 'media') { await media(); return; }\n      const size = role === 'memory' ? 2097152 : 65536;\n      const a = new Float64Array(role === 'memory' ? 0 : size);\n      const integers = new Uint32Array(role === 'memory' ? size : a.buffer);\n      for(let i = 0; i < a.length; i++) a[i] = .01 + ((i + seed) % 997) / 997;\n      const source = role === 'memory' ? new Uint32Array(size).fill(seed) : null;\n      const matrix = role === 'matrix' ? new Float32Array(128 * 128).fill(.01 + seed * .0001) : null;\n      const output = matrix ? new Float32Array(matrix.length) : null;\n      let checksum = 0, rounds = 0, lastReport = -1000;\n      report('running', role);\n      while (true) {\n        if (role === 'integer') {\n          for(let pass = 0; pass < 8; pass++) for(let i = 0; i < integers.length; i++) {\n            let x = (integers[i] + i + seed) | 0;\n            x = Math.imul(x ^ (x >>> 16), 0x7feb352d);\n            x = Math.imul(x ^ (x >>> 15), 0x846ca68b);\n            integers[i] = x ^ (x >>> 16); checksum = (checksum + integers[i]) | 0;\n          }\n        } else if(role === 'memory') {\n          // Two 8 MiB arrays: sequential copy plus strided reads/writes across the entire working set.\n          integers.set(source);\n          for(let i = 0; i < size; i++) {\n            const j = (i * 4099 + rounds) & (size - 1);\n            source[j] = Math.imul(integers[i] ^ source[j], 1664525) + 1013904223;\n          }\n          checksum = source[rounds & (size - 1)];\n        } else if(role === 'matrix') {\n          // Independent dot products exercise regular floating-point multiply/add and matrix access.\n          for(let row = 0; row < 128; row++) for(let col = 0; col < 128; col++) {\n            let x = 0, y = 0, z = 0, w = 0;\n            for(let k = 0; k < 128; k += 4) {\n              x += matrix[row * 128 + k] * matrix[k * 128 + col];\n              y += matrix[row * 128 + k + 1] * matrix[(k + 1) * 128 + col];\n              z += matrix[row * 128 + k + 2] * matrix[(k + 2) * 128 + col];\n              w += matrix[row * 128 + k + 3] * matrix[(k + 3) * 128 + col];\n            }\n            output[row * 128 + col] = x + y + z + w;\n          }\n          checksum = output[rounds & 16383]; matrix[rounds & 16383] = .01 + (checksum % .1);\n        } else {\n          for(let pass = 0; pass < 4; pass++) for(let i = 0; i < size; i++) {\n            let x = a[i], y = a[(i + 7919) & 65535];\n            x = Math.sin(x + y) * Math.cos(x * .37) + Math.sqrt(Math.abs(y) + 1e-8);\n            a[i] = x / (1.00001 + Math.abs(x) * 1e-5); checksum += a[i] * 1e-9;\n          }\n        }\n        rounds++;\n        const now = performance.now();\n        if(now - lastReport > 1000) { report('running', { role, rounds, checksum }); lastReport = now; }\n      }\n    } catch (error) { report('failed', error.message); }\n  };\n  async function media() {\n    if (!self.VideoEncoder || !self.VideoDecoder || !self.VideoFrame || !self.OffscreenCanvas) { report('unavailable', 'WebCodecs / OffscreenCanvas unavailable'); return; }\n    let encoder, decoder, failed = false, pending = 0, scheduled = 0, encoded = 0, decoded = 0, lastReport = 0, decoding = false, decodeBatch = 0;\n    const fail = error => {\n      if(failed) return;\n      failed = true; clearTimeout(scheduled);\n      if(encoder && encoder.state !== 'closed') encoder.close();\n      if(decoder && decoder.state !== 'closed') decoder.close();\n      report('failed', error.message);\n    };\n    try {\n      let config;\n      for(const candidate of [\n        { codec: 'avc1.64002a', width: 1920, height: 1080, bitrate: 16000000, framerate: 60 },\n        { codec: 'avc1.420028', width: 1920, height: 1080, bitrate: 10000000, framerate: 30 }\n      ]) {\n        const supported = await VideoEncoder.isConfigSupported({ ...candidate, hardwareAcceleration: 'prefer-hardware', latencyMode: 'realtime', avc: { format: 'avc' } });\n        if(supported.supported) { config = supported.config; break; }\n      }\n      if(!config) { report('unavailable', 'H.264 encoder unavailable'); return; }\n      decoder = new VideoDecoder({ output: frame => { decoded++; frame.close(); }, error: fail });\n      const schedule = () => {\n        if(!scheduled && !failed) scheduled = setTimeout(() => { scheduled = 0; pump(); }, 0);\n      };\n      encoder = new VideoEncoder({ error: fail, output(chunk, metadata) {\n        try {\n          pending--; encoded++;\n          if(metadata.decoderConfig && decoder.state === 'unconfigured') decoder.configure({ ...metadata.decoderConfig, hardwareAcceleration: 'prefer-hardware', optimizeForLatency: true });\n          // Intra-only input lets us skip chunks while the bounded decoder batch drains.\n          if(decoder.state === 'configured' && !decoding && decoder.decodeQueueSize < 4) {\n            decoder.decode(chunk);\n            if(++decodeBatch === 2) {\n              decoding = true; decodeBatch = 0;\n              decoder.flush().then(() => { decoding = false; }, fail);\n            }\n          }\n          if(performance.now() - lastReport > 1000) { report('running', { encoded, decoded }); lastReport = performance.now(); }\n          schedule();\n        } catch(e) { fail(e); }\n      }});\n      encoder.configure(config);\n      const canvas = new OffscreenCanvas(config.width, config.height), ctx = canvas.getContext('2d');\n      if(!ctx) throw new Error('Media canvas unavailable');\n      let index = 0;\n      function pump() {\n        try {\n          while(!failed && pending < 4 && encoder.encodeQueueSize < 4) {\n            for(let stripe = 0; stripe < 32; stripe++) {\n              ctx.fillStyle = `hsl(${(index * 7 + stripe * 13) % 360} 75% 55%)`;\n              ctx.fillRect(stripe * config.width / 32, 0, config.width / 32 + 1, config.height);\n            }\n            const frame = new VideoFrame(canvas, { timestamp: Math.round(index++ * 1000000 / config.framerate) });\n            try { encoder.encode(frame, { keyFrame: true }); pending++; } finally { frame.close(); }\n          }\n        } catch(e) { fail(e); }\n      }\n      report('initializing', 'Local synthetic H.264 encode/decode; prefer-hardware is a hint');\n      schedule();\n    } catch(error) { fail(error); }\n  }\n}\n)();";
-    const diagnostics = { workers: {}, neural: 'idle', gpu: 'idle' };
+    const simdBinary = 'AGFzbQEAAAABjYCAgAACYAJ/fQF9YAJ/fwF/ApiAgIAAAQNlbnYPX19saW5lYXJfbWVtb3J5AgAAA4OAgIAAAgABByECDGZsb2F0X2tlcm5lbAAADmludGVnZXJfa2VybmVsAAEKkoiAgAACjgUBCHv9DAAAIEBmZiZAzcwsQAAAAAAgAf0gAyEC/QzNzAxAMzMTQAAAAACamRlAIAH9IAIhA/0MMzPzPwAAAAAAAABAZmYGQCAB/SABIQT9DAAAAADNzMw/mpnZP2Zm5j8gAf0gACEF/QxmZqY/MzOzPwAAwD8AAAAAIAH9IAMhBv0MZmZmPwAAgD8AAAAAmpmZPyAB/SACIQf9DAAAAD8AAAAAMzMzP83MTD8gAf0gASEI/QwAAAAAzcxMPpqZmT7NzMw+IAH9IAAhCQJAIABBAUgNAANAIAL9DO3wfz/t8H8/7fB/P+3wfz/95gH9DOp4zDkXt9E5RfXWOXIz3Dn95AEhAiAD/Qw98n8/PfJ/Pz3yfz898n8//eYB/Qw0gLc5Yr68OY/8wTm9Osc5/eQBIQMgBP0MjPN/P4zzfz+M838/jPN/P/3mAf0Mf4eiOazFpznaA605B0KyOf3kASEEIAX9DNz0fz/c9H8/3PR/P9z0fz/95gH9DMmOjTn3zJI5JAuYOVJJnTn95AEhBSAG/Qwr9n8/K/Z/Pyv2fz8r9n8//eYB/QwoLHE5gqh7OW8SgzmcUIg5/eQBIQYgB/0Me/d/P3v3fz97938/e/d/P/3mAf0MvTpHORe3UTlyM1w5za9mOf3kASEHIAj9DMv4fz/L+H8/y/h/P8v4fz/95gH9DFJJHTmsxSc5B0IyOWK+PDn95AEhCCAJ/Qwa+n8/Gvp/Pxr6fz8a+n8//eYB/QzNr+Y4gqj7OJxQCDn3zBI5/eQBIQkgAEF/aiIADQALCyACIAMgBCAFIAYgByAIIAn95AH95AH95AH95AH95AH95AH95AEiAv0fAyAC/R8CIAL9HwAgAv0fAZKSkgv/AgEEe/0MDQAAAA4AAAAPAAAAAAAAACAB/RwDIQL9DAkAAAAKAAAAAAAAAAwAAAAgAf0cAiED/QwFAAAAAAAAAAcAAAAIAAAAIAH9HAEhBP0MAAAAAAIAAAADAAAABAAAACAB/RwAIQUCQCAAQQFIDQADQCACQQ39rQEgAv1R/Qz9QwMADWYZADVOWgFtTsZB/bUB/QzDniYAX/NuPAEAAAA5MAAA/a4BIQIgA0EO/a0BIAP9Uf0MbU7GQf1DAwANZhkANU5aAf21Af0MOTAAAMOeJgBf8248AQAAAP2uASEDIARBD/2tASAE/VH9DDVOWgFtTsZB/UMDAA1mGQD9tQH9DAEAAAA5MAAAw54mAF/zbjz9rgEhBCAFQRD9rQEgBf1R/QwNZhkANU5aAW1OxkH9QwMA/bUB/Qxf8248AQAAADkwAADDniYA/a4BIQUgAEF/aiIADQALCyADIAL9USAE/VEgBf1RIgL9GwAgAv0bAXMgAv0bAnMgAv0bA3ML';
+    const workerSource = "(function burnWorker() {\n  const report = (state, detail) => postMessage({ state, detail });\n  onmessage = async ({ data: { role: requestedRole, seed = 1, simd } }) => {\n    let role = requestedRole;\n    try {\n      if(role === 'simd-float' || role === 'simd-integer') {\n        let kernel;\n        try {\n          const bytes = Uint8Array.from(atob(simd), char => char.charCodeAt(0));\n          const module = new WebAssembly.Module(bytes);\n          const instance = new WebAssembly.Instance(module, { env: { __linear_memory: new WebAssembly.Memory({ initial: 2 }) } });\n          kernel = role === 'simd-float' ? instance.exports.float_kernel : instance.exports.integer_kernel;\n        } catch(error) { role = role === 'simd-float' ? 'float' : 'integer'; }\n        if(kernel) {\n          let rounds = 0, checksum = seed, lastReport = -1000;\n          while(true) {\n            checksum = kernel(100000, role === 'simd-float' ? .5 + (checksum % .25) : checksum | 0); rounds++;\n            if(performance.now() - lastReport > 1000) {\n              report('running', { role, backend: 'wasm-simd128', rounds, checksum }); lastReport = performance.now();\n            }\n          }\n        }\n      }\n      if (role === 'crypto') {\n        if (!self.crypto?.subtle) { report('unavailable', 'Web Crypto unavailable'); return; }\n        const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt']);\n        const data = new Uint8Array(1024 * 1024);\n        for (let i = 0; i < data.length; i++) data[i] = (i * 31 + seed) & 255;\n        let counter = 0, lastReport = 0;\n        report('running', 'AES-256-GCM + SHA-256; hardware selection belongs to browser');\n        while (true) {\n          const jobs = [];\n          for(let lane = 0; lane < 2; lane++) {\n            const iv = new Uint8Array(12); new DataView(iv.buffer).setBigUint64(4, BigInt(counter++));\n            jobs.push(crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data), crypto.subtle.digest('SHA-256', data));\n          }\n          await Promise.all(jobs);\n          if(performance.now() - lastReport > 1000) { report('running', { role, batches: counter }); lastReport = performance.now(); }\n        }\n      }\n      if (role === 'media') { await media(); return; }\n      const size = role === 'memory' ? 1048576 : 65536;\n      const a = new Float64Array(role === 'memory' ? 0 : size);\n      const integers = new Uint32Array(role === 'memory' ? size : a.buffer);\n      for(let i = 0; i < a.length; i++) a[i] = .01 + ((i + seed) % 997) / 997;\n      const source = role === 'memory' ? new Uint32Array(size).fill(seed) : null;\n      const matrix = role === 'matrix' ? new Float32Array(128 * 128).fill(.01 + seed * .0001) : null;\n      const output = matrix ? new Float32Array(matrix.length) : null;\n      const transposed = matrix ? new Float32Array(matrix) : null;\n      let checksum = 0, rounds = 0, lastReport = -1000;\n      report('running', role);\n      while (true) {\n        if (role === 'integer') {\n          for(let pass = 0; pass < 8; pass++) for(let i = 0; i < integers.length; i++) {\n            let x = (integers[i] + i + seed) | 0;\n            x = Math.imul(x ^ (x >>> 16), 0x7feb352d);\n            x = Math.imul(x ^ (x >>> 15), 0x846ca68b);\n            integers[i] = x ^ (x >>> 16); checksum = (checksum + integers[i]) | 0;\n          }\n        } else if(role === 'memory') {\n          // One bounded, sequential memory lane; spend most work on independent arithmetic.\n          integers.set(source);\n          for(let i = 0; i < size; i++) source[i] = Math.imul(integers[i], 1664525) + 1013904223;\n          let x = source[rounds & (size - 1)], y = x ^ 31, z = x ^ 127, w = x ^ 511;\n          for(let i = 0; i < 100000; i++) {\n            x = Math.imul(x ^ (x >>> 16), 1664525); y = Math.imul(y ^ (y >>> 15), 22695477);\n            z = Math.imul(z ^ (z >>> 14), 1103515245); w = Math.imul(w ^ (w >>> 13), 214013);\n          }\n          checksum = x ^ y ^ z ^ w;\n        } else if(role === 'matrix') {\n          // Independent dot products exercise regular floating-point multiply/add and matrix access.\n          for(let row = 0; row < 128; row++) for(let col = 0; col < 128; col++) {\n            let x = 0, y = 0, z = 0, w = 0;\n            for(let k = 0; k < 128; k += 4) {\n              x += matrix[row * 128 + k] * transposed[col * 128 + k];\n              y += matrix[row * 128 + k + 1] * transposed[col * 128 + k + 1];\n              z += matrix[row * 128 + k + 2] * transposed[col * 128 + k + 2];\n              w += matrix[row * 128 + k + 3] * transposed[col * 128 + k + 3];\n            }\n            output[row * 128 + col] = x + y + z + w;\n          }\n          checksum = output[rounds & 16383];\n          const changed = rounds & 16383, value = .01 + (checksum % .1);\n          matrix[changed] = value; transposed[(changed & 127) * 128 + (changed >>> 7)] = value;\n        } else {\n          for(let pass = 0; pass < 4; pass++) for(let i = 0; i < size; i++) {\n            let x = a[i], y = a[(i + 7919) & 65535];\n            x = Math.sin(x + y) * Math.cos(x * .37) + Math.sqrt(Math.abs(y) + 1e-8);\n            a[i] = x / (1.00001 + Math.abs(x) * 1e-5); checksum += a[i] * 1e-9;\n          }\n        }\n        rounds++;\n        const now = performance.now();\n        if(now - lastReport > 1000) { report('running', { role, rounds, checksum }); lastReport = now; }\n      }\n    } catch (error) { report('failed', error.message); }\n  };\n  async function media() {\n    if (!self.VideoEncoder || !self.VideoDecoder || !self.VideoFrame || !self.OffscreenCanvas) { report('unavailable', 'WebCodecs / OffscreenCanvas unavailable'); return; }\n    let encoder, decoder, failed = false, pending = 0, encoded = 0, decoded = 0, lastReport = 0, decoding = false, decodeBatch = 0, scheduled = false;\n    const waiting = [], channel = new MessageChannel();\n    const fail = error => {\n      if(failed) return;\n      failed = true; channel.port1.close(); channel.port2.close();\n      if(encoder && encoder.state !== 'closed') encoder.close();\n      if(decoder && decoder.state !== 'closed') decoder.close();\n      report('failed', error.message);\n    };\n    try {\n      let config;\n      for(const candidate of [\n        { codec: 'avc1.64002a', width: 1920, height: 1080, bitrate: 24000000, framerate: 60 },\n        { codec: 'avc1.420028', width: 1920, height: 1080, bitrate: 16000000, framerate: 30 }\n      ]) {\n        const supported = await VideoEncoder.isConfigSupported({ ...candidate, hardwareAcceleration: 'prefer-hardware', latencyMode: 'realtime', avc: { format: 'avc' } });\n        if(supported.supported) { config = supported.config; break; }\n      }\n      if(!config) { channel.port1.close(); channel.port2.close(); report('unavailable', 'H.264 encoder unavailable'); return; }\n      const schedule = () => { if(!scheduled && !failed) { scheduled = true; channel.port2.postMessage(0); } };\n      const progress = () => {\n        if(performance.now() - lastReport > 1000) { report('running', { encoded, decoded, queued: waiting.length, pending }); lastReport = performance.now(); }\n      };\n      decoder = new VideoDecoder({ output: frame => { decoded++; frame.close(); }, error: fail });\n      function drainDecoder() {\n        if(failed || decoding || decoder.state !== 'configured') return;\n        while(waiting.length && decodeBatch < 4) { decoder.decode(waiting.shift()); decodeBatch++; }\n        if(decodeBatch === 4 || (!pending && !waiting.length && decodeBatch)) {\n          decoding = true; decodeBatch = 0;\n          decoder.flush().then(() => { decoding = false; if(!failed) { drainDecoder(); progress(); schedule(); } }, fail);\n        }\n      }\n      encoder = new VideoEncoder({ error: fail, output(chunk, metadata) {\n        try {\n          pending--; encoded++;\n          if(metadata.decoderConfig && decoder.state === 'unconfigured') decoder.configure({ ...metadata.decoderConfig, hardwareAcceleration: 'prefer-hardware', optimizeForLatency: true });\n          if(decoder.state !== 'configured') throw new Error('Missing decoder configuration');\n          waiting.push(chunk); drainDecoder(); progress(); schedule();\n        } catch(e) { fail(e); }\n      }});\n      encoder.configure(config);\n      const canvas = new OffscreenCanvas(config.width, config.height), ctx = canvas.getContext('2d');\n      const texture = new OffscreenCanvas(128, 128), textureContext = texture.getContext('2d');\n      if(!ctx || !textureContext) throw new Error('Media canvas unavailable');\n      const image = textureContext.createImageData(128,128); let noise = 1234567;\n      for(let i = 0; i < image.data.length; i += 4) {\n        noise ^= noise << 13; noise ^= noise >>> 17; noise ^= noise << 5;\n        image.data[i] = noise & 255; image.data[i+1] = (noise >>> 8) & 255; image.data[i+2] = (noise >>> 16) & 255; image.data[i+3] = 255;\n      }\n      textureContext.putImageData(image, 0, 0);\n      const pattern = ctx.createPattern(texture, 'repeat'); let index = 0;\n      function pump() {\n        try {\n          // Backpressure: preserve every encoded frame; never outrun the decoder.\n          while(!failed && !decoding && waiting.length < 4 && pending < 4 && encoder.encodeQueueSize < 4) {\n            const offset = index & 127; ctx.setTransform(1,0,0,1,offset,offset); ctx.fillStyle = pattern;\n            ctx.fillRect(-128,-128,config.width+256,config.height+256); ctx.setTransform(1,0,0,1,0,0);\n            const frame = new VideoFrame(canvas, { timestamp: Math.round(index++ * 1000000 / config.framerate) });\n            try { encoder.encode(frame, { keyFrame: true }); pending++; } finally { frame.close(); }\n          }\n        } catch(e) { fail(e); }\n      }\n      channel.port1.onmessage = () => { scheduled = false; pump(); };\n      report('initializing', 'Local noisy H.264 encode/decode, bounded queues and no frame dropping'); schedule();\n    } catch(error) { fail(error); }\n  }\n}\n)();";
+    const diagnostics = { workers: {}, neural: 'idle', gpu: 'idle', gpuErrors: [], gpuRecoveries: 0, gpuCompletedChunks: 0, gpuCompletionCallbacks: 0, gpuComputedElements: 0, gpuRenderedPixels: 0 };
     // Console-only diagnostics keep unsupported APIs visible without adding dashboard elements.
-    Object.defineProperty(window, 'burnDiagnostics', { get: () => JSON.parse(JSON.stringify({ running: state.running, ...diagnostics })) });
+    Object.defineProperty(window, 'burnDiagnostics', { get: () => JSON.parse(JSON.stringify({ running: state.running, visible: document.visibilityState === 'visible', elapsedMs: state.running ? performance.now()-state.startTime : state.elapsed, ...diagnostics, gpuRetryAttempts: state.gpuRetryAttempts, gpuRetryScheduled: !!state.gpuRetryTimer, ocean: ocean?.diagnostics })) });
     function spawnWorkload(role, index) {
       const url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
       try {
         const worker = new Worker(url), name = role + '-' + index;
         worker.onmessage = ({ data }) => { diagnostics.workers[name] = data; if(data.state === 'failed') console.warn(name, data.detail); };
         worker.onerror = event => { diagnostics.workers[name] = { state: 'failed', detail: event.message }; console.warn(name, event.message); };
-        state.workers.push(worker); worker.postMessage({ role, seed: index + 1 });
+        state.workers.push(worker); worker.postMessage({ role, seed: index + 1, simd: simdBinary });
       } finally { URL.revokeObjectURL(url); }
     }
     function startWorkers() {
       stopWorkers(); diagnostics.workers = {};
-      const roles = ['integer', 'float', 'memory', 'matrix'];
+      const roles = ['simd-integer', 'simd-float', 'float', 'matrix'];
       for(let i = 0; i < reportedConcurrency; i++) spawnWorkload(roles[i % roles.length], i);
-      spawnWorkload('crypto', reportedConcurrency);
-      spawnWorkload('media', reportedConcurrency + 1);
+      spawnWorkload('memory', reportedConcurrency);
+      spawnWorkload('crypto', reportedConcurrency + 1);
+      spawnWorkload('media', reportedConcurrency + 2);
     }
     function stopWorkers() {
       for(const worker of state.workers) worker.terminate(); state.workers = [];
@@ -99,9 +125,11 @@
         const release = () => closeNeuralResource(resource);
         if(!valid()) { release(); return; }
         state.neural = resource;
-        const builder = new MLGraphBuilder(context), shape = [256, 256], descriptor = { dataType: 'float32', shape };
+        const builder = new MLGraphBuilder(context), shape = [512, 512], descriptor = { dataType: 'float32', shape };
         const a = builder.input('a', descriptor), b = builder.input('b', descriptor);
-        const graph = await builder.build({ output: builder.relu(builder.matmul(a, b)) });
+        let activation = a;
+        for(let layer = 0; layer < 4; layer++) activation = builder.relu(builder.matmul(activation, b));
+        const graph = await builder.build({ output: activation });
         if(!valid()) { graph.destroy(); release(); return; }
         resource.graph = graph;
         for(let i = 0; i < 3; i++) {
@@ -110,7 +138,7 @@
           resource.tensors.push(tensor);
         }
         const [ta, tb, output] = resource.tensors;
-        const input = new Float32Array(65536); for(let i = 0; i < input.length; i++) input[i] = ((i % 127) - 63) / 128;
+        const input = new Float32Array(512 * 512); for(let i = 0; i < input.length; i++) input[i] = ((i % 127) - 63) / 128;
         context.writeTensor(ta, input); context.writeTensor(tb, input);
         state.neural = resource; diagnostics.neural = 'running';
         while(valid()) { context.dispatch(graph, { a: ta, b: tb }, { output }); await context.readTensor(output); }
@@ -122,23 +150,38 @@
       }
     }
     const computeWGSL = `
-      struct Params { iterations: u32, elementCount: u32, seed: f32, pad: f32 }
+      struct Params { iterations: u32, elementCount: u32, seed: f32, offset: u32 }
       @group(0) @binding(0) var<storage, read_write> values: array<f32>;
       @group(0) @binding(1) var<uniform> params: Params;
+      @group(0) @binding(2) var workloadTexture: texture_2d<f32>;
+      @group(0) @binding(3) var workloadSampler: sampler;
       @compute @workgroup_size(256)
       fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-        let i = id.x;
+        let i = id.x + params.offset;
         if (i >= params.elementCount) { return; }
         var x = values[i] + params.seed + f32(i & 1023u) * 0.000001;
         var v = vec4<f32>(x, x * 0.73 + 0.1, x * 1.13 + 0.2, x * 0.37 + 0.3);
+        var a = v * 0.17; var b = v * 0.23; var c = v * 0.31; var d = v * 0.37;
+        var e = v * 0.41; var f = v * 0.43; var g = v * 0.47; var h = v * 0.53;
         for (var j = 0u; j < 512u; j++) {
           if (j >= params.iterations) { break; }
+          // Independent arithmetic chains add ALU work without extra storage traffic.
+          a = a * 0.99991 + vec4<f32>(0.00011,0.00012,0.00013,0.00014);
+          b = b * 0.99987 + vec4<f32>(0.00015,0.00016,0.00017,0.00018);
+          c = c * 0.99983 + vec4<f32>(0.00019,0.00020,0.00021,0.00022);
+          d = d * 0.99979 + vec4<f32>(0.00023,0.00024,0.00025,0.00026);
+          e = e * 0.99977 + vec4<f32>(0.00027,0.00028,0.00029,0.00030);
+          f = f * 0.99973 + vec4<f32>(0.00031,0.00032,0.00033,0.00034);
+          g = g * 0.99971 + vec4<f32>(0.00035,0.00036,0.00037,0.00038);
+          h = h * 0.99967 + vec4<f32>(0.00039,0.00040,0.00041,0.00042);
+          // Consume the raymarch output on the GPU; never read it back to the CPU.
+          if((j & 63u) == 0u) { v += textureSampleLevel(workloadTexture, workloadSampler, fract(v.xy * 0.5 + 0.5), 0.0) * 0.001; }
           v = sin(v.yzwx + v * vec4<f32>(0.71, 0.83, 0.97, 1.07));
           v = cos(v * v.wxyz + vec4<f32>(0.13, 0.17, 0.19, 0.23)) + sqrt(abs(v) + vec4<f32>(0.0001));
           let d = dot(v, vec4<f32>(0.21, 0.27, 0.31, 0.37));
           v = fract(v + d * 0.019 + f32(j) * 0.000013) * 2.0 - 1.0;
         }
-        values[i] = dot(v, vec4<f32>(0.19, 0.23, 0.29, 0.31));
+        values[i] = dot(v + (a+b+c+d+e+f+g+h)*0.001, vec4<f32>(0.19, 0.23, 0.29, 0.31));
       }
     `;
     const renderWGSL = `
@@ -174,9 +217,9 @@
           let p = ro + rd * travel;
           let d = mapScene(p);
           glow += exp(-abs(d) * 22.0) * 0.012;
-          if (abs(d) < 0.0015) { hit = 1.0; break; }
+          if (abs(d) < 0.0015) { hit = 1.0; }
           travel += clamp(abs(d) * 0.58, 0.002, 0.12);
-          if (travel > 7.5) { break; }
+          if (travel > 7.5) { travel = 0.0; }
         }
         let fog = exp(-travel * 0.16);
         let base = vec3(0.02,0.055,0.11) + vec3(0.12,0.55,0.95) * glow;
@@ -192,9 +235,10 @@
       const device = await adapter.requestDevice();
       if(version !== state.runVersion || !state.running) { device.destroy(); return false; }
       try {
-      device.lost.then(info => { if(state.gpu?.device === device) handleGPUFailure(info); });
+      let lostInfo = null;
+      device.lost.then(info => { lostInfo = info; if(state.gpu?.device === device) handleGPUFailure(info); });
       device.addEventListener('uncapturederror', e => { if(state.gpu?.device === device) handleGPUFailure({ message: e.error.message }); });
-      const format = navigator.gpu.getPreferredCanvasFormat();
+      const format = 'rgba8unorm';
       device.pushErrorScope('validation');
       const computeModule = device.createShaderModule({ code: computeWGSL });
       const renderModule = device.createShaderModule({ code: renderWGSL });
@@ -209,14 +253,15 @@
       const renderBindGroup = device.createBindGroup({ layout: renderPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: renderUniform } }] });
       const validationError = await device.popErrorScope();
       if (validationError || version !== state.runVersion || !state.running) { device.destroy(); if(validationError) throw new Error(validationError.message); return false; }
-      const context = ui['gpu-canvas'].getContext('webgpu');
-      if (!context) throw new Error('Unable to acquire a WebGPU canvas context.');
-      context.configure({ device, format, alphaMode: 'opaque' });
-      state.gpu = { device, context, format, computePipeline, renderPipeline, computeUniform, renderUniform, storage: null, computeBindGroup: null, renderBindGroup, elementCount: 0, pending: 0 };
+      if(lostInfo) throw new Error(lostInfo.message || 'GPU lost during initialization');
+      const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+      state.gpu = { device, format, sampler, target: null, computePipeline, renderPipeline, computeUniform, renderUniform, storage: null, computeBindGroup: null, renderBindGroup, elementCount: 0, pending: 0, submitted: 0, completed: 0, computedElements: 0, renderedPixels: 0, completedElements: 0, completedPixels: 0, computeOffset: 0, computePass: 0, renderTile: 0 };
+      resizeCanvas();
       rebuildStorage();
       state.backend = 'webgpu';
+      clearTimeout(state.gpuRetryTimer); state.gpuRetryTimer = 0;
       return true;
-      } catch(e) { device.destroy(); throw e; }
+      } catch(e) { if(state.gpu?.device === device) disposeGPU(); else device.destroy(); throw e; }
     }
     function rebuildStorage() {
       if (!state.gpu) return;
@@ -228,11 +273,18 @@
       for (let i = 0; i < seed.length; i++) seed[i] = (i % 1024) / 1024 + 0.001;
       device.queue.writeBuffer(storage, 0, seed);
       state.gpu.storage = storage; state.gpu.elementCount = seed.length;
-      state.gpu.computeBindGroup = device.createBindGroup({ layout: computePipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: storage } }, { binding: 1, resource: { buffer: computeUniform } }] });
+      rebuildComputeBindGroup(state.gpu);
+    }
+    function rebuildComputeBindGroup(g) {
+      if(!g.storage || !g.target) return;
+      g.computeBindGroup = g.device.createBindGroup({ layout: g.computePipeline.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: g.storage } }, { binding: 1, resource: { buffer: g.computeUniform } },
+        { binding: 2, resource: g.target.createView() }, { binding: 3, resource: g.sampler }
+      ] });
     }
 
     const webglVertex = `#version 300 es\nprecision highp float;\nconst vec2 P[3]=vec2[3](vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.));\nout vec2 uv;\nvoid main(){gl_Position=vec4(P[gl_VertexID],0.,1.);uv=P[gl_VertexID]*.5+.5;}`;
-    const webglFragment = `#version 300 es\nprecision highp float;\nin vec2 uv;out vec4 color;uniform vec2 res;uniform float time;uniform int steps;uniform int fractal;\nfloat mapScene(vec3 p){vec3 z=p;float s=1.;for(int i=0;i<16;i++){if(i>=fractal)break;z=abs(z)/max(dot(z,z),.12)-vec3(.76,.72,.86);float c=cos(time*.09),q=sin(time*.09);z.xy=mat2(c,-q,q,c)*z.xy;s*=1.18;}return max(length(z)/s-.025,(length(p-vec3(0,0,2.8))-1.15)*.32);}\nvoid main(){float a=res.x/max(res.y,1.);vec2 p=(uv*2.-1.)*vec2(a,1);vec3 ro=vec3(0,0,-3.3),rd=normalize(vec3(p,1.55));float t=0.,g=0.,h=0.;for(int i=0;i<192;i++){if(i>=steps)break;float d=mapScene(ro+rd*t);g+=exp(-abs(d)*22.)*.012;if(abs(d)<.0015){h=1.;break;}t+=clamp(abs(d)*.58,.002,.12);if(t>7.5)break;}float fog=exp(-t*.16),pulse=.7+.3*sin(time*.8+t*3.);color=vec4((vec3(.02,.055,.11)+vec3(.12,.55,.95)*g)*fog+h*vec3(.18,.72,1.)*pulse,1);}`;
+    const webglFragment = `#version 300 es\nprecision highp float;\nin vec2 uv;out vec4 color;uniform vec2 res;uniform float time;uniform int steps;uniform int fractal;\nfloat mapScene(vec3 p){vec3 z=p;float s=1.;for(int i=0;i<16;i++){if(i>=fractal)break;z=abs(z)/max(dot(z,z),.12)-vec3(.76,.72,.86);float c=cos(time*.09),q=sin(time*.09);z.xy=mat2(c,-q,q,c)*z.xy;s*=1.18;}return max(length(z)/s-.025,(length(p-vec3(0,0,2.8))-1.15)*.32);}\nvoid main(){float a=res.x/max(res.y,1.);vec2 p=(uv*2.-1.)*vec2(a,1);vec3 ro=vec3(0,0,-3.3),rd=normalize(vec3(p,1.55));float t=0.,g=0.,h=0.;for(int i=0;i<192;i++){if(i>=steps)break;float d=mapScene(ro+rd*t);g+=exp(-abs(d)*22.)*.012;if(abs(d)<.0015){h=1.;}t+=clamp(abs(d)*.58,.002,.12);if(t>7.5)t=0.;}float fog=exp(-t*.16),pulse=.7+.3*sin(time*.8+t*3.);color=vec4((vec3(.02,.055,.11)+vec3(.12,.55,.95)*g)*fog+h*vec3(.18,.72,1.)*pulse,1);}`;
     function compileShader(gl, type, source) {
       const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
@@ -245,12 +297,22 @@
       gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, webglVertex)); gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, webglFragment)); gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
       state.gl = { gl, program, uniforms: { res: gl.getUniformLocation(program,'res'), time: gl.getUniformLocation(program,'time'), steps: gl.getUniformLocation(program,'steps'), fractal: gl.getUniformLocation(program,'fractal') } };
+      gl.canvas.addEventListener('webglcontextlost', () => {
+        if(state.gl?.gl === gl) handleGPUFailure({ message: 'WebGL context lost' });
+      });
       state.backend = 'webgl2'; return true;
     }
-    async function initGPU(version) {
-      try { if (await initWebGPU(version)) return; } catch (e) { showError(`WebGPU unavailable; using WebGL2 fallback.\n${e.message}`); }
+    async function initGPU(version, allowWebGPU = true) {
+      if(allowWebGPU) {
+        try { if (await initWebGPU(version)) return; } catch (e) {
+          if(version !== state.runVersion || !state.running) return;
+          showError(`WebGPU unavailable; using WebGL2 fallback.\n${e.message}`);
+          disposeGPU();
+        }
+      }
       if(version !== state.runVersion || !state.running) return;
       try { initWebGL2(); } catch (e) { state.backend = 'cpu-only'; showError(`GPU initialization failed. CPU mode remains available.\n${e.message}`); }
+      scheduleGPUUpgrade();
     }
 
     function resizeCanvas() {
@@ -260,39 +322,71 @@
       const height = Math.max(1, Math.floor(innerHeight * dpr));
       if (ui['gpu-canvas'].width !== width || ui['gpu-canvas'].height !== height) { ui['gpu-canvas'].width = width; ui['gpu-canvas'].height = height; }
       state.resizeNeeded = false;
+      const g = state.gpu;
+      if(g && (g.targetWidth !== width || g.targetHeight !== height)) {
+        const target = g.device.createTexture({ size: [width, height], format: g.format, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+        g.target?.destroy(); g.target = target; g.targetWidth = width; g.targetHeight = height;
+        g.renderTile = 0; rebuildComputeBindGroup(g);
+      }
+    }
+    function nextGPUChunk(g, width, height) {
+      // Preserve four full compute sweeps and a full-resolution raymarch per cycle,
+      // but give the GPU scheduler bounded commands instead of one giant batch.
+      if(g.computePass < gpuLoad().dispatches) {
+        const offset = g.computeOffset, count = Math.min(gpuQueue.computeElements, g.elementCount - offset);
+        g.computeOffset += count;
+        if(g.computeOffset >= g.elementCount) { g.computeOffset = 0; g.computePass++; }
+        return { kind: 'compute', offset, count };
+      }
+      const size = gpuQueue.tileSize;
+      const columns = Math.ceil(width / size), rows = Math.ceil(height / size);
+      const tile = g.renderTile++, x = (tile % columns) * size, y = Math.floor(tile / columns) * size;
+      if(g.renderTile >= columns * rows) { g.renderTile = 0; g.computePass = 0; }
+      return { kind: 'render', x, y, width: Math.min(size, width-x), height: Math.min(size, height-y) };
     }
     function renderWebGPU(now) {
       const g = state.gpu, { device } = g;
-      if (g.pending >= 2) return false;
+      if (g.pending >= gpuQueue.depth) return false;
       const version = state.runVersion;
       const encoder = device.createCommandEncoder();
-      if (true) {
+      const chunk = nextGPUChunk(g, ui['gpu-canvas'].width, ui['gpu-canvas'].height);
+      if (chunk.kind === 'compute') {
         const params = new ArrayBuffer(16), view = new DataView(params);
         view.setUint32(0, gpuLoad().iterations, true); view.setUint32(4, g.elementCount, true); view.setFloat32(8, now * 0.000001, true);
+        view.setUint32(12, chunk.offset, true);
         device.queue.writeBuffer(g.computeUniform, 0, params);
         const pass = encoder.beginComputePass(); pass.setPipeline(g.computePipeline); pass.setBindGroup(0, g.computeBindGroup);
-        const groups = Math.min(65535, Math.ceil(g.elementCount / 256));
-        const dispatches = gpuLoad().dispatches;
-        for (let i = 0; i < dispatches; i++) pass.dispatchWorkgroups(groups);
-        pass.end(); state.gpuDispatches += dispatches;
+        pass.dispatchWorkgroups(Math.ceil(chunk.count / 256));
+        pass.end(); state.gpuDispatches++;
+        g.computedElements += chunk.count;
       }
-      if (true) {
+      if (chunk.kind === 'render') {
         const params = new ArrayBuffer(32), view = new DataView(params);
         view.setFloat32(0, ui['gpu-canvas'].width, true); view.setFloat32(4, ui['gpu-canvas'].height, true); view.setFloat32(8, now / 1000, true);
         view.setUint32(12, gpuLoad().steps, true); view.setUint32(16, gpuLoad().fractal, true);
         device.queue.writeBuffer(g.renderUniform, 0, params);
-        const pass = encoder.beginRenderPass({ colorAttachments: [{ view: g.context.getCurrentTexture().createView(), clearValue: {r:.01,g:.015,b:.025,a:1}, loadOp:'clear', storeOp:'store' }] });
+        const pass = encoder.beginRenderPass({ colorAttachments: [{ view: g.target.createView(), clearValue: {r:.01,g:.015,b:.025,a:1}, loadOp: chunk.x === 0 && chunk.y === 0 ? 'clear' : 'load', storeOp:'store' }] });
+        pass.setScissorRect(chunk.x, chunk.y, chunk.width, chunk.height);
         pass.setPipeline(g.renderPipeline); pass.setBindGroup(0, g.renderBindGroup); pass.draw(3); pass.end();
+        g.renderedPixels += chunk.width * chunk.height;
       }
       device.queue.submit([encoder.finish()]);
-      g.pending++;
-      device.queue.onSubmittedWorkDone().then(() => {
-        g.pending = Math.max(0, g.pending - 1);
-        // Refill immediately without waiting for the display refresh or a frame-rate target.
-        if (state.running && version === state.runVersion && state.wakeActive && document.visibilityState === 'visible') frame(performance.now());
-      }, e => {
-        g.pending = Math.max(0, g.pending - 1); if(state.gpu === g) handleGPUFailure({ message: e.message });
-      });
+      g.pending = ++g.submitted - g.completed;
+      if(g.submitted % gpuQueue.checkpoint === 0) {
+        // Fence every four submissions, with up to twelve queued behind it.
+        // Refill before the queue drains instead of waking JS for every small job.
+        const serial = g.submitted, elements = g.computedElements, pixels = g.renderedPixels;
+        device.queue.onSubmittedWorkDone().then(() => {
+          if(!state.running || state.gpu !== g || version !== state.runVersion || serial <= g.completed) return;
+          diagnostics.gpuCompletedChunks += serial - g.completed;
+          diagnostics.gpuComputedElements += elements - g.completedElements;
+          diagnostics.gpuRenderedPixels += pixels - g.completedPixels;
+          diagnostics.gpuCompletionCallbacks++;
+          g.completed = serial; g.completedElements = elements; g.completedPixels = pixels;
+          g.pending = g.submitted - g.completed;
+          if(state.wakeActive && document.visibilityState === 'visible') frame(performance.now());
+        }, e => { if(state.gpu === g) handleGPUFailure({ message: e.message }); });
+      }
       return true;
     }
     function renderWebGL2(now) {
@@ -306,41 +400,53 @@
 
 
     function frame(now) {
-      if(!state.running) return;
+      if(!state.running || state.gpuRecovering) return;
       if(state.resizeNeeded) resizeCanvas();
-      let submitted = false;
       try {
         if(state.backend === 'webgpu') {
-          // Prime both slots and refill only vacant slots on GPU completion.
-          while(state.gpu.pending < 2) { if(!renderWebGPU(now)) break; submitted = true; }
-        } else if(state.backend === 'webgl2') submitted = renderWebGL2(now);
+          while(state.gpu.pending < gpuQueue.depth) { if(!renderWebGPU(now)) break; }
+        } else if(state.backend === 'webgl2') renderWebGL2(now);
       }
-      catch(e) { handleGPUFailure({message:e.message},false); return; }
-      // WebGPU is driven by completion; WebGL2 and an old pending batch use rAF.
-      if(state.backend !== 'webgpu' || !submitted) state.raf = requestAnimationFrame(frame);
+      catch(e) { handleGPUFailure({message:e.message}); return; }
+      // WebGPU completion owns refills. Do not create a competing rAF chain when full.
+      if(state.backend === 'webgl2') state.raf = requestAnimationFrame(frame);
+    }
+    const ocean = window.AsciiOcean ? new AsciiOcean($('ocean-canvas')) : null;
+    if(window.ForegroundMotion) new window.ForegroundMotion(document.querySelector('main'));
+    function updateElapsed() {
+      if(state.running) state.elapsed = Math.max(0, performance.now() - state.startTime);
+      const n = Math.floor(state.elapsed/1000);
+      ui.elapsed.textContent = [Math.floor(n/3600),Math.floor(n/60)%60,n%60].map(value=>String(value).padStart(2,'0')).join(':');
     }
     function syncToggle() {
       ui.toggle.dataset.running = String(state.running);
       ui.toggle.setAttribute('aria-pressed',String(state.running));
       ui.toggle.setAttribute('aria-label',state.running ? '停止耗电' : '开始耗电');
-      ui['toggle-label'].textContent = state.running ? '停止' : '开始';
+
     }
     async function start() {
       if(state.running || !state.wakeActive || document.visibilityState !== 'visible') return;
-      clearError(); state.gpuFault = false; const version = ++state.runVersion;
-      state.running = true;
+      clearError(); state.gpuRecovering = false; state.gpuRecoveries = 0;
+      state.gpuRetryAttempts = 0;
+      diagnostics.gpuErrors = []; diagnostics.gpuRecoveries = 0; diagnostics.gpuCompletedChunks = 0;
+      diagnostics.gpuCompletionCallbacks = 0; diagnostics.gpuComputedElements = 0; diagnostics.gpuRenderedPixels = 0;
+      const version = ++state.runVersion;
+      state.running = true; state.startTime = performance.now(); state.elapsed = 0; updateElapsed();
       state.gpuDispatches = 0;
       state.resizeNeeded = true;
       syncToggle(); startStatusTimer(); requestWakeLock(false);
       try {
         startWorkers(); startNeural(version);
         await initGPU(version);
-        if(!state.running || version !== state.runVersion || !state.wakeActive || state.gpuFault) return;
+        if(!state.running || version !== state.runVersion || !state.wakeActive || state.gpuRecovering) return;
         diagnostics.gpu = state.backend; state.raf = requestAnimationFrame(frame);
       } catch(e) { if(version === state.runVersion) { showError(e); stop(); } }
     }
     function stop() {
+      updateElapsed();
       state.running = false; state.runVersion++; clearTimeout(state.wakeRetry); state.wakeRetry = 0;
+      state.gpuRecovering = false;
+      clearTimeout(state.gpuRetryTimer); state.gpuRetryTimer = 0;
       releaseWakeLock(); cancelAnimationFrame(state.raf); state.raf = 0; stopWorkers(); disposeNeural();
       clearInterval(state.statusTimer); state.statusTimer = 0; disposeGPU();
       syncToggle(); diagnostics.gpu = 'stopped';
@@ -348,13 +454,12 @@
     function disposeGPU() {
       const gpu = state.gpu, fallback = state.gl;
       state.gpu = null; state.gl = null; state.backend = 'none';
-      gpu?.context.unconfigure(); gpu?.device.destroy();
+      gpu?.target?.destroy(); gpu?.device.destroy();
       fallback?.gl.getExtension('WEBGL_lose_context')?.loseContext();
-      if(gpu || fallback) {
-        const canvas = ui['gpu-canvas'];
-        const replacement = canvas.cloneNode(false);
-        canvas.replaceWith(replacement); ui['gpu-canvas'] = replacement;
-      }
+      // Also reset a canvas whose context was acquired before initialization failed.
+      const canvas = ui['gpu-canvas'];
+      const replacement = canvas.cloneNode(false);
+      canvas.replaceWith(replacement); ui['gpu-canvas'] = replacement;
       state.resizeNeeded = true;
     }
     async function releaseSentinel(lock) {
@@ -414,17 +519,63 @@
       }
     }
 
-    function handleGPUFailure(info) {
-      if (state.gpuFault) return;
-      state.gpuFault = true; stop(); ui['toggle-label'].textContent = '重试'; ui.toggle.setAttribute('aria-label', 'GPU 异常，点击重试');
-      showError('GPU 异常，耗电任务已停止，点击按钮重试。\n' + (info.message || info.reason || '原因未知'));
+    async function handleGPUFailure(info) {
+      if (!state.running || state.gpuRecovering) return;
+      const version = state.runVersion, backend = state.backend;
+      state.gpuRecovering = true;
+      diagnostics.gpuErrors.push({ backend, elapsedMs: performance.now()-state.startTime, message: info.message || info.reason || 'unknown' });
+      diagnostics.gpuErrors = diagnostics.gpuErrors.slice(-8);
+      console.warn('GPU workload interrupted:', info);
+      cancelAnimationFrame(state.raf); state.raf = 0; disposeGPU();
+      diagnostics.gpu = 'recovering';
+      try {
+        // One immediate retry, then fall back and schedule a bounded delayed upgrade.
+        // Never restart CPU workers,
+        // reset the timer, or recreate GPU resources after Stop/pagehide.
+        if(backend === 'webgpu') {
+          const retryWebGPU = state.gpuRecoveries++ === 0;
+          diagnostics.gpuRecoveries = state.gpuRecoveries;
+          await initGPU(version, retryWebGPU);
+        } else state.backend = 'cpu-only';
+      } catch(e) {
+        if(version === state.runVersion && state.running) { disposeGPU(); state.backend = 'cpu-only'; showError(e); }
+      } finally {
+        if(version === state.runVersion && state.running) {
+          state.gpuRecovering = false; diagnostics.gpu = state.backend;
+          if(state.wakeActive && document.visibilityState === 'visible' && state.backend !== 'cpu-only') state.raf = requestAnimationFrame(frame);
+          scheduleGPUUpgrade();
+        }
+      }
+    }
+    function scheduleGPUUpgrade() {
+      if(!state.running || state.backend === 'webgpu' || state.gpuRetryTimer || state.gpuRetryAttempts >= 3) return;
+      const version = state.runVersion;
+      const retryTimer = setTimeout(async () => {
+        if(state.gpuRetryTimer !== retryTimer || version !== state.runVersion) return;
+        state.gpuRetryTimer = 0;
+        if(version !== state.runVersion || !state.running || !state.wakeActive || document.visibilityState !== 'visible' || state.backend === 'webgpu') return;
+        if(state.gpuRecovering) { scheduleGPUUpgrade(); return; }
+        state.gpuRetryAttempts++; state.gpuRecovering = true;
+        cancelAnimationFrame(state.raf); state.raf = 0; disposeGPU(); diagnostics.gpu = 'recovering';
+        try { await initGPU(version); }
+        catch(error) {
+          if(version === state.runVersion && state.running) { disposeGPU(); state.backend = 'cpu-only'; showError(error); }
+        } finally {
+          if(version === state.runVersion && state.running) {
+            state.gpuRecovering = false; diagnostics.gpu = state.backend;
+            if(state.wakeActive && document.visibilityState === 'visible' && state.backend !== 'cpu-only') state.raf = requestAnimationFrame(frame);
+            scheduleGPUUpgrade();
+          }
+        }
+      }, 30000 * 2 ** state.gpuRetryAttempts);
+      state.gpuRetryTimer = retryTimer;
     }
     function resumeDisplay() {
       if (!state.wakeActive || document.visibilityState !== 'visible') return;
       state.resizeNeeded = true; requestWakeLock(false);
     }
     ui.toggle.addEventListener('click', () => state.running ? stop() : start());
-    addEventListener('resize', () => state.resizeNeeded = true);
+    addEventListener('resize', () => { state.resizeNeeded = true; ocean?.resize(); });
     document.addEventListener('visibilitychange', () => {
       if(document.visibilityState === 'visible') resumeDisplay();
       else stop();
@@ -441,7 +592,7 @@
       if(state.statusTimer || !state.running) return;
       state.statusTimer = setInterval(() => {
         if(!state.wakeActive || document.visibilityState !== 'visible') return;
-        requestWakeLock(false);
+        requestWakeLock(false); updateElapsed();
       },1000);
     }
   })();
